@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import prisma from '@/prisma/client';
+import { sendWelcomeEmail } from '@/app/utils/emailTemplates/email';
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,13 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json(
+        { message: 'Email service is not configured. Add RESEND_API_KEY to your .env file.' },
+        { status: 500 }
+      );
+    }
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -66,6 +74,19 @@ export async function POST(request: NextRequest) {
         createdAt: true,
       },
     });
+
+    try {
+      const { error } = await sendWelcomeEmail({
+        to: 'maitland.n@gmail.com', // Hardcoded for testing on Resend's free tier
+        firstName: user.firstName,
+      });
+
+      if (error) {
+        console.error('Welcome email error:', error);
+      }
+    } catch (emailError) {
+      console.error('Welcome email failed:', emailError);
+    }
 
     return NextResponse.json(
       {

@@ -36,12 +36,9 @@ model User {
   accounts      Account[]
   sessions      Session[]
 
-  // Projects
-  ownedProjects Project[]     @relation("ProjectOwner")
-  memberships   TeamMember[]
-  tasks         Task[]        @relation("TaskAssignee")
-  createdTasks  Task[]        @relation("TaskCreator")
-  comments      Comment[]
+  // StudyFlow AI relations
+  courses       Course[]
+  studyPlans    StudyPlan[]
 
   @@index([email])
 }
@@ -88,133 +85,107 @@ model VerificationToken {
 }
 
 // ============================================
-// Project Management Models
+// StudyFlow AI Business Models
 // ============================================
 
-enum ProjectStatus {
-  PLANNING
-  IN_PROGRESS
-  ON_HOLD
-  COMPLETED
-  CANCELLED
-}
-
-model Project {
-  id          String        @id @default(cuid())
-  name        String
-  description String?       @db.Text
-  status      ProjectStatus @default(PLANNING)
-  startDate   DateTime?
-  endDate     DateTime?
-  ownerId     String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+model Course {
+  id             String         @id @default(cuid())
+  courseCode     String
+  courseName     String
+  instructorName String?
+  semester       String
+  syllabusUrl    String?
+  userId         String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   // Relations
-  owner       User          @relation("ProjectOwner", fields: [ownerId], references: [id])
-  members     TeamMember[]
-  tasks       Task[]
-  milestones  Milestone[]
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academicTasks  AcademicTask[]
 
-  @@index([ownerId])
-}
-
-enum MemberRole {
-  OWNER
-  MEMBER
-  VIEWER
-}
-
-model TeamMember {
-  id        String     @id @default(cuid())
-  projectId String
-  userId    String
-  role      MemberRole @default(MEMBER)
-  joinedAt  DateTime   @default(now())
-
-  // Relations
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, userId])
-  @@index([projectId])
   @@index([userId])
+  @@unique([userId, courseCode, semester])
 }
 
-// ============================================
-// Task Management Models
-// ============================================
+enum AcademicTaskType {
+  ASSIGNMENT
+  QUIZ
+  EXAM
+  PROJECT
+  READING
+  OTHER
+}
 
-enum TaskStatus {
-  TODO
+enum AcademicTaskStatus {
+  NOT_STARTED
   IN_PROGRESS
-  IN_REVIEW
-  DONE
+  COMPLETED
+  OVERDUE
 }
 
-enum TaskPriority {
+enum AcademicTaskPriority {
   LOW
   MEDIUM
   HIGH
   URGENT
 }
 
-model Task {
-  id          String       @id @default(cuid())
-  title       String
-  description String?      @db.Text
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(MEDIUM)
-  dueDate     DateTime?
-  projectId   String
-  assigneeId  String?
-  creatorId   String
-  milestoneId String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+model AcademicTask {
+  id                  String               @id @default(cuid())
+  title               String
+  description         String?              @db.Text
+  type                AcademicTaskType     @default(ASSIGNMENT)
+  dueDate             DateTime
+  priority            AcademicTaskPriority @default(MEDIUM)
+  status              AcademicTaskStatus   @default(NOT_STARTED)
+  estimatedStudyHours Float?
+  courseId            String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   // Relations
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  creator     User         @relation("TaskCreator", fields: [creatorId], references: [id])
-  milestone   Milestone?   @relation(fields: [milestoneId], references: [id])
-  comments    Comment[]
+  course              Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studySessions       StudySession[]
 
-  @@index([projectId])
-  @@index([assigneeId])
-  @@index([creatorId])
-  @@index([milestoneId])
+  @@index([courseId])
+  @@index([dueDate])
 }
 
-model Milestone {
-  id          String    @id @default(cuid())
-  name        String
-  description String?   @db.Text
-  dueDate     DateTime?
-  projectId   String
-  isCompleted Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+model StudyPlan {
+  id                String         @id @default(cuid())
+  weekStartDate     DateTime
+  weekEndDate       DateTime
+  goal              String?        @db.Text
+  totalPlannedHours Float?
+  userId            String
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   // Relations
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  tasks       Task[]
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studySessions     StudySession[]
 
-  @@index([projectId])
+  @@index([userId])
+  @@unique([userId, weekStartDate])
 }
 
-model Comment {
-  id        String   @id @default(cuid())
-  content   String   @db.Text
-  taskId    String
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model StudySession {
+  id             String       @id @default(cuid())
+  sessionDate    DateTime
+  durationMinutes Int
+  topic          String
+  reminderAt     DateTime?
+  completed      Boolean      @default(false)
+  studyPlanId    String
+  academicTaskId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   // Relations
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author    User     @relation(fields: [authorId], references: [id])
+  studyPlan      StudyPlan    @relation(fields: [studyPlanId], references: [id], onDelete: Cascade)
+  academicTask   AcademicTask @relation(fields: [academicTaskId], references: [id], onDelete: Cascade)
 
-  @@index([taskId])
-  @@index([authorId])
+  @@index([studyPlanId])
+  @@index([academicTaskId])
+  @@index([sessionDate])
 }
